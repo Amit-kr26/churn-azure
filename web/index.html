@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Churn predictor</title>
+<meta name="description" content="Churn model for bank customers, served from Azure Container Apps.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2313243a'/%3E%3Crect x='3' y='8' width='3' height='5' fill='%23e8573a'/%3E%3Crect x='7' y='4' width='3' height='9' fill='white'/%3E%3Crect x='11' y='6' width='2' height='7' fill='%232bb394'/%3E%3C/svg%3E">
+<script src="config.js"></script>
+<style>
+  :root {
+    --night:#13243a; --night-2:#1d3350; --ink:#16202e; --muted:#5b6778; --rule:#d3d9d6; --bg:#eceff0; --paper:#fff;
+    --leave:#d8432a; --leave-bg:#f9e4df; --stay:#1c8a6e; --stay-bg:#dcf0e8; --blue:#2d5b8a; --blue-bg:#e2ebf4;
+    --serif:Charter,"Bitstream Charter","Sitka Text",Cambria,Georgia,serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 var(--sans); }
+  .mast { background:var(--night); color:#fff; }
+  .mast-in, main { max-width:1080px; margin:0 auto; padding-left:20px; padding-right:20px; }
+  .mast-top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 24px; padding-top:22px; padding-bottom:20px; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .brand svg { width:34px; height:34px; flex:none; }
+  h1 { margin:0; font:700 1.5rem/1 var(--sans); letter-spacing:-.025em; }
+  h1 span { display:block; margin-top:5px; font:400 .8rem/1.2 var(--sans); letter-spacing:0; color:#9fb3cb; }
+  #status { display:inline-flex; align-items:center; gap:8px; font-size:.82rem; color:#cfdbea; }
+  #status::before { content:""; width:8px; height:8px; border-radius:50%; background:#6b7f99; }
+  #status.ok::before { background:#2bb394; box-shadow:0 0 0 3px rgba(43,179,148,.25); }
+  #status.bad::before { background:var(--leave); box-shadow:0 0 0 3px rgba(216,67,42,.3); }
+  nav { display:flex; gap:2px; overflow-x:auto; }
+  nav button { padding:10px 16px; border:0; border-radius:3px 3px 0 0; background:none; color:#b4c4d8; font:inherit; font-size:.92rem; cursor:pointer; white-space:nowrap; }
+  nav button:hover { background:var(--night-2); color:#fff; }
+  nav button[aria-selected="true"] { background:var(--bg); color:var(--ink); font-weight:600; }
+  :focus-visible { outline:2px solid #5aa0e0; outline-offset:2px; }
+  main { padding-top:28px; padding-bottom:64px; }
+  h2 { margin:0 0 4px; font:600 1.3rem/1.25 var(--serif); }
+  h3 { margin:0 0 10px; font:600 1rem/1.3 var(--serif); }
+  p { margin:0 0 12px; max-width:70ch; }
+  .muted { color:var(--muted); }
+  section[hidden] { display:none; }
+  .panel { background:var(--paper); border:1px solid var(--rule); border-top:3px solid var(--night); padding:18px 20px 20px; overflow-x:auto; }
+  .split { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,6fr); gap:24px; align-items:start; }
+  @media (max-width:820px) { .split { grid-template-columns:1fr; } }
+  .presets { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; align-items:center; font-size:.85rem; color:var(--muted); }
+  form { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  label { display:grid; gap:4px; font-size:.82rem; color:var(--muted); }
+  input, select { width:100%; padding:8px 9px; border:1px solid #bcc5c9; border-radius:2px; background:#fbfcfc; color:var(--ink); font:inherit; }
+  .go { padding:10px 18px; border:1px solid var(--night); border-radius:2px; background:var(--night); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  .go:hover { background:var(--night-2); }
+  .chip { padding:4px 11px; border:1px solid #bcc5c9; border-radius:99px; background:var(--paper); color:var(--ink); font:inherit; font-size:.82rem; cursor:pointer; }
+  .chip:hover { border-color:var(--night); }
+  .plain { padding:8px 14px; border:1px solid var(--blue); border-radius:2px; background:none; color:var(--blue); font:inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  form .full { grid-column:1/-1; }
+  .empty { padding:28px 4px; color:var(--muted); }
+  .empty b { display:block; margin-bottom:6px; color:var(--ink); font:600 1.1rem var(--serif); }
+  .verdict { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; }
+  .big { font:700 4.6rem/1 var(--serif); letter-spacing:-.03em; }
+  .big.leave { color:var(--leave); } .big.stay { color:var(--stay); }
+  .verdict span { font-size:1rem; color:var(--muted); }
+  .scale { display:block; width:100%; height:auto; margin:14px 0 4px; overflow:visible; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:2px; font-size:.78rem; font-weight:600; }
+  .tag.leave { background:var(--leave-bg); color:#a3301c; } .tag.stay { background:var(--stay-bg); color:#136a54; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { padding:7px 8px; text-align:left; border-bottom:1px solid var(--rule); vertical-align:middle; }
+  th { font-weight:600; color:var(--muted); font-size:.8rem; background:#f6f8f8; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  table.fixed { table-layout:fixed; }
+  td.barcell { padding-right:0; }
+  .track { height:10px; background:#e4e9e8; position:relative; overflow:hidden; }
+  .fill { position:absolute; inset:0 auto 0 0; background:var(--blue); max-width:100%; }
+  .fill.leave { background:var(--leave); }
+  .grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr)); gap:20px; }
+  .facts { display:flex; flex-wrap:wrap; gap:6px 36px; margin:0 0 16px; }
+  .facts div { display:grid; } .facts dt { font-size:.8rem; color:var(--muted); } .facts dd { margin:0; font:700 2rem/1.2 var(--serif); }
+  .err { color:var(--leave); white-space:pre-wrap; }
+  .chart { display:block; width:100%; height:auto; }
+  .chart text { font:10px var(--sans); fill:var(--muted); }
+  .chart .hot { font-weight:700; fill:var(--ink); paint-order:stroke; stroke:#fff; stroke-width:3px; stroke-linejoin:round; }
+  .matrix { display:grid; grid-template-columns:auto 1fr 1fr; gap:4px; font-size:.85rem; }
+  .matrix div { padding:12px 10px; }
+  .matrix .head { padding:4px 10px; color:var(--muted); font-size:.8rem; }
+  .matrix .cell { text-align:center; font:700 1.5rem var(--serif); }
+  .matrix .cell small { display:block; font:400 .75rem var(--sans); }
+  footer { margin-top:40px; padding-top:12px; border-top:1px solid var(--rule); font-size:.82rem; color:var(--muted); }
+  @media (prefers-reduced-motion:no-preference) { .pin { transition:transform .5s cubic-bezier(.2,.8,.2,1); } }
+</style>
+</head>
+<body>
+<header class="mast">
+  <div class="mast-in">
+    <div class="mast-top">
+      <div class="brand">
+        <svg viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="3" fill="#1d3350"/><rect x="6" y="17" width="6" height="11" fill="#e8573a"/><rect x="14" y="8" width="6" height="20" fill="#fff"/><rect x="22" y="13" width="6" height="15" fill="#2bb394"/></svg>
+        <h1>Churn predictor<span>Which bank customers are about to leave</span></h1>
+      </div>
+      <span id="status" role="status">Connecting to API</span>
+    </div>
+    <nav role="tablist" aria-label="Views">
+      <button role="tab" aria-selected="true" data-tab="score">Score a customer</button>
+      <button role="tab" aria-selected="false" data-tab="batch">Score a CSV</button>
+      <button role="tab" aria-selected="false" data-tab="data">Training data</button>
+      <button role="tab" aria-selected="false" data-tab="model">Model</button>
+      <button role="tab" aria-selected="false" data-tab="history">Recent scores</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section id="score">
+    <div class="split">
+      <div class="panel">
+        <div class="presets">Start from
+          <button class="chip" type="button" data-preset="steady">a steady customer</button>
+          <button class="chip" type="button" data-preset="risk">an at-risk customer</button>
+        </div>
+        <form id="form">
+          <label>Credit score<input name="CreditScore" type="number" min="300" max="900" value="650" required></label>
+          <label>Age<input name="Age" type="number" min="18" max="100" value="42" required></label>
+          <label>Country<select name="Geography"><option>France</option><option>Germany</option><option>Spain</option></select></label>
+          <label>Gender<select name="Gender"><option>Female</option><option>Male</option></select></label>
+          <label>Years as customer<input name="Tenure" type="number" min="0" max="10" value="3" required></label>
+          <label>Products held<input name="NumOfProducts" type="number" min="1" max="4" value="1" required></label>
+          <label>Balance<input name="Balance" type="number" min="0" step="0.01" value="76000" required></label>
+          <label>Estimated salary<input name="EstimatedSalary" type="number" min="0" step="0.01" value="100000" required></label>
+          <label>Has credit card<select name="HasCrCard"><option value="1">Yes</option><option value="0">No</option></select></label>
+          <label>Active member<select name="IsActiveMember"><option value="1">Yes</option><option value="0">No</option></select></label>
+          <div class="full"><button class="go" type="submit" id="scoreBtn">Score customer</button></div>
+        </form>
+      </div>
+      <div class="panel" id="result" aria-live="polite">
+        <div class="empty"><b>No score yet</b>Fill in the profile and press Score customer. You get a churn probability and the factors that pushed it up or down.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="batch" hidden>
+    <div class="panel">
+      <h2>Score a CSV</h2>
+      <p class="muted">Up to 500 rows and 1 MB. Columns: CreditScore, Geography, Gender, Age, Tenure, Balance, NumOfProducts, HasCrCard, IsActiveMember, EstimatedSalary.</p>
+      <p><input id="file" type="file" accept=".csv,text/csv" style="width:auto"></p>
+      <p><button class="go" id="batchBtn" type="button">Score file</button> <button class="plain" id="tpl" type="button">Download template</button></p>
+      <div id="batchOut"></div>
+    </div>
+  </section>
+
+  <section id="data" hidden><div id="dataOut"><p class="muted">Loading</p></div></section>
+  <section id="model" hidden><div id="modelOut"><p class="muted">Loading</p></div></section>
+  <section id="history" hidden><div class="panel" id="historyOut"><p class="muted">Loading</p></div></section>
+
+  <footer>Churn model trained on the 10,000-row bank churn dataset. FastAPI on Azure Container Apps, Cosmos DB for scores, Static Web Apps for this page.</footer>
+</main>
+
+<script>
+const API = (window.API_URL || "").replace(/\/$/, "");
+const $ = (id) => document.getElementById(id);
+const pct = (x, d = 0) => (x * 100).toFixed(d) + "%";
+const num = (x) => Number(x).toLocaleString();
+const SVG = "http://www.w3.org/2000/svg";
+
+function make(ns, tag, attrs, kids) {
+  const e = ns ? document.createElementNS(ns, tag) : document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.setAttribute("class", v); else if (k === "style") e.style.cssText = v; else e.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null) e.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return e;
+}
+const el = (tag, attrs, ...kids) => make(null, tag, attrs, kids);
+const sv = (tag, attrs, ...kids) => make(SVG, tag, attrs, kids);
+
+function table(head, rows, numeric = [], widths) {
+  return el("table", { class: widths ? "fixed" : "" },
+    widths ? el("colgroup", {}, widths.map((w) => el("col", { style: `width:${w}` }))) : null,
+    el("thead", {}, el("tr", {}, head.map((h, i) => el("th", { class: numeric.includes(i) ? "n" : "" }, h)))),
+    el("tbody", {}, rows.map((r) => el("tr", {}, r.map((c, i) => el("td", { class: (numeric.includes(i) ? "n " : "") + (c && c.nodeType && c.classList.contains("track") ? "barcell" : "") }, c))))));
+}
+
+function track(value, max, cls = "") {
+  return el("div", { class: "track" }, el("div", { class: "fill " + cls, style: `width:${Math.min(100, (value / max) * 100)}%` }));
+}
+
+const ALGORITHMS = { logistic_regression: "Logistic regression", random_forest: "Random forest", extra_trees: "Extra trees", gradient_boosting: "Gradient boosting", neural_network: "Neural network" };
+const FRIENDLY = {
+  CreditScore: "Credit score", Geography: "Country", Gender: "Gender", Age: "Age", Tenure: "Years as customer", Balance: "Balance",
+  NumOfProducts: "Products held", HasCrCard: "Has credit card", IsActiveMember: "Active member", EstimatedSalary: "Salary",
+};
+function friendly(name) {
+  return FRIENDLY[name] || name;
+}
+
+function message(detail, status) {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) return detail.map((d) => `${(d.loc || []).slice(1).join(".")}: ${d.msg}`).join("\n");
+  if (detail && detail.row_errors) {
+    return detail.message + "\n" + detail.row_errors.map((r) => `row ${r.row + 1}: ` + r.errors.map((e) => `${e.loc.join(".")} ${e.msg}`).join(", ")).join("\n");
+  }
+  return `Request failed (${status})`;
+}
+
+function sessionId() {
+  try {
+    let id = localStorage.getItem("churn-session");
+    if (!/^[0-9a-f]{32}$/.test(id || "")) {
+      id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+      localStorage.setItem("churn-session", id);
+    }
+    return id;
+  } catch { return "0".repeat(32); }
+}
+const SESSION = sessionId();
+
+async function api(path, opts = {}) {
+  let res;
+  try { res = await fetch(API + path, { ...opts, headers: { ...opts.headers, "X-Session": SESSION } }); }
+  catch { throw new Error("Cannot reach the API. If it was idle, the first request can take about 15 seconds; try again."); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(message(body.detail, res.status));
+  return body;
+}
+
+function setStatus(text, state) {
+  const s = $("status");
+  s.textContent = text;
+  s.className = state;
+}
+
+async function checkHealth() {
+  try {
+    const h = await api("/health");
+    setStatus(h.model_loaded ? `API online, model ${h.model_version}` : "API online, no model loaded", h.model_loaded ? "ok" : "bad");
+  } catch { setStatus("API unreachable", "bad"); }
+}
+
+const tabs = document.querySelectorAll("[role=tab]");
+const loaders = { data: loadData, model: loadModel, history: loadHistory };
+const loaded = {};
+function show(name) {
+  tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+  document.querySelectorAll("main > section").forEach((s) => { s.hidden = s.id !== name; });
+  if (loaders[name] && (!loaded[name] || name === "history")) { loaded[name] = true; loaders[name](); }
+  history.replaceState(null, "", "#" + name);
+}
+tabs.forEach((t, i) => {
+  t.addEventListener("click", () => show(t.dataset.tab));
+  t.addEventListener("keydown", (e) => {
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1 }[e.key];
+    if (next !== undefined) { const n = tabs[(next + tabs.length) % tabs.length]; n.focus(); n.click(); }
+  });
+});
+
+const PRESETS = {
+  steady: { CreditScore: 720, Age: 34, Geography: "France", Gender: "Male", Tenure: 6, NumOfProducts: 2, Balance: 52000, EstimatedSalary: 88000, HasCrCard: 1, IsActiveMember: 1 },
+  risk: { CreditScore: 540, Age: 58, Geography: "Germany", Gender: "Female", Tenure: 2, NumOfProducts: 1, Balance: 128000, EstimatedSalary: 61000, HasCrCard: 0, IsActiveMember: 0 },
+};
+document.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+  for (const [k, v] of Object.entries(PRESETS[b.dataset.preset])) $("form").elements[k].value = v;
+}));
+
+function formPayload() {
+  const out = {};
+  for (const [k, v] of new FormData($("form"))) out[k] = ["Geography", "Gender"].includes(k) ? v : Number(v);
+  return out;
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("scoreBtn");
+  btn.disabled = true;
+  const post = (path) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formPayload()) });
+  try {
+    const [p, x] = await Promise.all([post("/predict"), post("/explain")]);
+    renderResult(p, x);
+    setStatus(`API online, model ${p.model_version}`, "ok");
+  } catch (err) {
+    $("result").replaceChildren(el("p", { class: "err" }, err.message));
+  } finally { btn.disabled = false; }
+});
+
+function riskScale(p, threshold) {
+  const W = 400;
+  const x = p * W;
+  const t = threshold * W;
+  const pin = sv("g", { class: "pin", style: "transform:translateX(0px)" },
+    sv("path", { d: "M0 6 L-7 -6 L7 -6 Z", fill: "#16202e" }),
+    sv("line", { x1: 0, y1: 6, x2: 0, y2: 26, stroke: "#16202e", "stroke-width": 2 }));
+  const svg = sv("svg", { class: "scale", viewBox: "-8 -14 416 74", role: "img", "aria-label": `Churn probability ${pct(p)} on a scale from 0 to 100 percent` },
+    sv("rect", { x: 0, y: 8, width: t, height: 18, fill: "#dcf0e8" }),
+    sv("rect", { x: t, y: 8, width: W - t, height: 18, fill: "#f9e4df" }),
+    sv("rect", { x: 0, y: 8, width: x, height: 18, fill: p >= threshold ? "#d8432a" : "#1c8a6e", opacity: 0.9 }),
+    sv("line", { x1: t, y1: 2, x2: t, y2: 34, stroke: "#16202e", "stroke-width": 1, "stroke-dasharray": "3 2" }),
+    sv("text", { x: 0, y: 48, "font-size": 11, fill: "#5b6778" }, "0%"),
+    sv("text", { x: Math.min(Math.max(t, 70), W - 70), y: 48, "font-size": 11, fill: "#16202e", "text-anchor": "middle" }, `${pct(threshold)} decision line`),
+    sv("text", { x: W, y: 48, "font-size": 11, fill: "#5b6778", "text-anchor": "end" }, "100%"),
+    pin);
+  requestAnimationFrame(() => requestAnimationFrame(() => { pin.style.transform = `translateX(${x}px)`; }));
+  return svg;
+}
+
+function driverChart(drivers) {
+  const top = Math.max(...drivers.map((d) => Math.abs(d.contribution)), 0.01);
+  const rowH = 26, labelW = 150, half = 110, W = labelW + half * 2 + 10;
+  const mid = labelW + half;
+  const svg = sv("svg", { class: "chart", viewBox: `0 0 ${W} ${drivers.length * rowH + 22}`, role: "img", "aria-label": "Factors that raised or lowered the churn score" });
+  svg.append(
+    sv("text", { x: mid - 6, y: 10, "text-anchor": "end" }, "lowers risk"),
+    sv("text", { x: mid + 6, y: 10 }, "raises risk"),
+    sv("line", { x1: mid, y1: 14, x2: mid, y2: drivers.length * rowH + 20, stroke: "#16202e" }));
+  drivers.forEach((d, i) => {
+    const y = 20 + i * rowH, w = Math.max(2, (Math.abs(d.contribution) / top) * half), up = d.contribution > 0;
+    svg.append(
+      sv("text", { x: 0, y: y + 12, class: i === 0 ? "hot" : "" }, friendly(d.feature)),
+      sv("rect", { x: up ? mid : mid - w, y: y, width: w, height: 16, fill: up ? "#d8432a" : "#1c8a6e" }, sv("title", {}, `${friendly(d.feature)}: ${d.contribution > 0 ? "+" : ""}${(d.contribution * 100).toFixed(1)} points of churn probability`)));
+  });
+  return svg;
+}
+
+function renderResult(p, x) {
+  const leave = p.churn === 1;
+  const drivers = [...x.toward_churn, ...x.toward_stay].sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+  $("result").replaceChildren(
+    el("div", { class: "verdict" }, el("div", { class: "big " + (leave ? "leave" : "stay") }, pct(p.probability)), el("span", {}, "chance this customer leaves")),
+    riskScale(p.probability, p.threshold),
+    el("p", {}, el("span", { class: "tag " + (leave ? "leave" : "stay") }, leave ? "Likely to churn" : "Likely to stay"), " ", leave ? `Above the ${pct(p.threshold)} line the model uses to flag churn.` : `Below the ${pct(p.threshold)} line the model uses to flag churn.`),
+    el("h3", { style: "margin-top:18px" }, "What moved the score"),
+    driverChart(drivers));
+}
+
+$("tpl").addEventListener("click", () => {
+  download("template.csv", "CreditScore,Geography,Gender,Age,Tenure,Balance,NumOfProducts,HasCrCard,IsActiveMember,EstimatedSalary\n650,France,Female,42,3,76000,1,1,1,100000\n480,Germany,Male,61,2,120000,1,0,0,54000\n");
+});
+
+function download(name, text) {
+  const a = el("a", { href: URL.createObjectURL(new Blob([text], { type: "text/csv" })), download: name });
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+$("batchBtn").addEventListener("click", async () => {
+  const file = $("file").files[0];
+  if (!file) { $("batchOut").replaceChildren(el("p", { class: "err" }, "Choose a CSV file first.")); return; }
+  $("batchBtn").disabled = true;
+  try {
+    const r = await api("/batch_predict", { method: "POST", headers: { "Content-Type": "text/csv" }, body: await file.text() });
+    const rows = [...r.rows].sort((a, b) => b.probability - a.probability);
+    const dl = el("button", { class: "plain", type: "button" }, "Download results");
+    dl.addEventListener("click", () => download("scores.csv", "row,churn,probability\n" + r.rows.map((x) => `${x.row},${x.churn},${x.probability}`).join("\n") + "\n"));
+    $("batchOut").replaceChildren(
+      el("h3", { style: "margin-top:20px" }, `${r.n_scored} rows scored, ${r.n_churn} flagged as likely to churn (${pct(r.n_churn / r.n_scored)})`),
+      el("p", {}, dl),
+      table(["CSV row", "Churn probability", "Flag"], rows.slice(0, 100).map((x) => [x.row, pct(x.probability, 1), el("span", { class: "tag " + (x.churn ? "leave" : "stay") }, x.churn ? "likely to leave" : "likely to stay")]), [0, 1]),
+      rows.length > 100 ? el("p", { class: "muted" }, `Showing the 100 highest-risk rows of ${rows.length}. Download for all.`) : null);
+  } catch (err) {
+    $("batchOut").replaceChildren(el("p", { class: "err" }, err.message));
+  } finally { $("batchBtn").disabled = false; }
+});
+
+function segmentPanel(title, map) {
+  const entries = Object.entries(map);
+  const max = Math.max(...entries.map(([, v]) => v.rate), 0.01);
+  return el("div", { class: "panel" }, el("h3", {}, title),
+    table(["Segment", "Count", "Churn", ""], entries.map(([k, v]) => [k, num(v.n), pct(v.rate, 1), track(v.rate, max, "leave")]), [1, 2], ["26%", "22%", "20%", "32%"]));
+}
+
+const compact = (t) => (Number(t) >= 1000 ? Math.round(Number(t) / 1000) + "k" : t);
+
+function columnChart(title, bins, overall) {
+  const n = bins.labels.length, W = 340, H = 170, left = 34, bottom = 28, top = 14, gap = 5;
+  const max = Math.max(...bins.churn_rate, overall) * 1.15;
+  const bw = (W - left) / n - gap;
+  const y = (v) => top + (H - top - bottom) * (1 - v / max);
+  const svg = sv("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${title}: churn rate by range` });
+  [0, 0.5, 1].forEach((f) => {
+    const v = max * f;
+    svg.append(sv("line", { x1: left, x2: W, y1: y(v), y2: y(v), stroke: "#e1e6e5" }), sv("text", { x: left - 5, y: y(v) + 3, "text-anchor": "end" }, pct(v)));
+  });
+  bins.churn_rate.forEach((r, i) => {
+    const x = left + i * (bw + gap) + gap / 2;
+    svg.append(
+      sv("rect", { x, y: y(r), width: bw, height: Math.max(1, H - bottom - y(r)), fill: r > overall ? "#d8432a" : "#2d5b8a" }, sv("title", {}, `${bins.labels[i]}: ${pct(r, 1)} of ${num(bins.n[i])} customers`)),
+      sv("text", { x: x + bw / 2, y: H - 14, "text-anchor": "middle" }, compact(bins.labels[i].split("–")[0])));
+  });
+  svg.append(
+    sv("line", { x1: left, x2: W, y1: y(overall), y2: y(overall), stroke: "#16202e", "stroke-dasharray": "4 3" }),
+    sv("text", { x: W, y: y(overall) - 4, "text-anchor": "end", class: "hot" }, `overall ${pct(overall, 1)}`));
+  return el("div", { class: "panel" }, el("h3", {}, title), svg);
+}
+
+async function loadData() {
+  try {
+    const s = await api("/stats");
+    $("dataOut").replaceChildren(
+      el("dl", { class: "facts" },
+        el("div", {}, el("dt", {}, "Customers"), el("dd", {}, num(s.n_rows))),
+        el("div", {}, el("dt", {}, "Overall churn rate"), el("dd", {}, pct(s.overall_churn_rate, 1)))),
+      el("p", { class: "muted" }, "Red columns churn more than the dataset average, blue ones less."),
+      el("div", { class: "grid2" },
+        columnChart("Churn rate by age", s.age_bins, s.overall_churn_rate),
+        columnChart("Churn rate by credit score", s.credit_bins, s.overall_churn_rate),
+        columnChart("Churn rate by balance", s.balance_bins, s.overall_churn_rate),
+        segmentPanel("By country", s.by_geography),
+        segmentPanel("By gender", s.by_gender),
+        segmentPanel("By products held", s.by_products)));
+  } catch (err) { loaded.data = false; $("dataOut").replaceChildren(el("p", { class: "err" }, err.message)); }
+}
+
+function calibrationChart(bins) {
+  const S = 240, pad = 44;
+  const x = (v) => pad + v * (S - pad - 22), y = (v) => S - pad - v * (S - pad - 12);
+  const svg = sv("svg", { class: "chart", viewBox: `0 0 ${S} ${S}`, style: "max-width:360px", role: "img", "aria-label": "Calibration: mean predicted against observed churn rate" });
+  [0, 0.5, 1].forEach((v) => svg.append(
+    sv("line", { x1: x(0), x2: x(1), y1: y(v), y2: y(v), stroke: "#e1e6e5" }),
+    sv("text", { x: x(0) - 4, y: y(v) + 3, "text-anchor": "end" }, pct(v)),
+    sv("text", { x: x(v), y: S - pad + 14, "text-anchor": "middle" }, pct(v))));
+  svg.append(
+    sv("line", { x1: x(0), y1: y(0), x2: x(1), y2: y(1), stroke: "#16202e", "stroke-dasharray": "4 3" }),
+    sv("text", { x: x(0.5), y: S - 4, "text-anchor": "middle" }, "mean predicted"),
+    sv("text", { x: 10, y: y(0.5), transform: `rotate(-90 10 ${y(0.5)})`, "text-anchor": "middle" }, "observed"));
+  const maxN = Math.max(...bins.map((b) => b.n), 1);
+  bins.filter((b) => b.n).forEach((b) => svg.append(
+    sv("circle", { cx: x(b.mean_predicted), cy: y(b.observed_rate), r: 3 + 6 * Math.sqrt(b.n / maxN), fill: "#2d5b8a", opacity: 0.75 },
+      sv("title", {}, `${pct(b.lo)} to ${pct(b.hi)}: predicted ${pct(b.mean_predicted, 1)}, observed ${pct(b.observed_rate, 1)}, ${num(b.n)} customers`))));
+  return svg;
+}
+
+function confusion(tn, fp, fn, tp) {
+  const total = tn + fp + fn + tp;
+  const cell = (v, good) => el("div", { class: "cell", style: `background:${good ? "#dcf0e8" : "#f9e4df"}` }, num(v), el("small", {}, pct(v / total, 1) + " of test set"));
+  return el("div", { class: "matrix" },
+    el("div", { class: "head" }), el("div", { class: "head" }, "Predicted stay"), el("div", { class: "head" }, "Predicted churn"),
+    el("div", { class: "head" }, "Actually stayed"), cell(tn, true), cell(fp, false),
+    el("div", { class: "head" }, "Actually churned"), cell(fn, false), cell(tp, true));
+}
+
+async function loadModel() {
+  try {
+    const [m, f] = await Promise.all([api("/metrics"), api("/feature_importance?top_n=10")]);
+    const [[tn, fp], [fn, tp]] = m.confusion_matrix.matrix;
+    const topImp = Math.max(...f.features.map((x) => x.importance));
+    const groups = Object.entries(m.subgroup_metrics).flatMap(([col, g]) => Object.entries(g).map(([k, v]) => [`${col === "Geography" ? "Country" : col}: ${k}`, num(v.n), pct(v.accuracy, 1), v.f1.toFixed(2), pct(v.recall, 0), pct(v.observed_churn_rate, 1), pct(v.mean_predicted, 1)]));
+    $("modelOut").replaceChildren(
+      el("p", { class: "muted" }, `Version ${m.model_version}, ${ALGORITHMS[m.algorithm] || m.algorithm}, trained on ${m.data_source} data and scored on a held-out 20% split.`),
+      el("dl", { class: "facts" },
+        el("div", {}, el("dt", {}, "Accuracy"), el("dd", {}, pct(m.accuracy, 1))),
+        el("div", {}, el("dt", {}, "F1 on churners"), el("dd", {}, m.f1.toFixed(3))),
+        el("div", {}, el("dt", {}, "ROC AUC"), el("dd", {}, m.roc_auc.toFixed(3))),
+        el("div", {}, el("dt", {}, "Train / test rows"), el("dd", {}, `${num(m.n_train)} / ${num(m.n_test)}`))),
+      el("div", { class: "grid2" },
+        el("div", { class: "panel" }, el("h3", {}, "Confusion matrix"), confusion(tn, fp, fn, tp),
+          el("p", { class: "muted", style: "margin-top:12px" }, `A customer is flagged when the probability passes ${pct(m.threshold)}. That cut-off was chosen to maximise F1 on the training folds, since only about one customer in five churns and accuracy alone would reward a model that never flags anyone.`)),
+        el("div", { class: "panel" }, el("h3", {}, "What the model relies on"),
+          table(["Feature", "Weight", ""], f.features.map((x) => [friendly(x.feature), pct(x.importance, 1), track(x.importance, topImp)]), [1], ["44%", "16%", "40%"]))),
+      el("div", { class: "panel", style: "margin-top:20px" }, el("h3", {}, "Models compared"),
+        table(["Model", "CV F1", "CV AUC", "Test F1", "Test AUC", "Accuracy", "Cut-off", ""],
+          m.candidates.map((c) => [ALGORITHMS[c.name] || c.name, c.cv_f1.toFixed(3), c.cv_auc.toFixed(3), c.test_f1.toFixed(3), c.test_auc.toFixed(3), pct(c.test_accuracy, 1), pct(c.threshold), c.name === m.algorithm ? el("span", { class: "tag stay" }, "selected") : ""]), [1, 2, 3, 4, 5, 6]),
+        el("p", { class: "muted", style: "margin-top:10px" }, "Every training run fits all five models with calibrated probabilities, tunes each one's cut-off on out-of-fold predictions, and keeps the best cross-validated F1. A retrained model only replaces the one in service if it scores at least as well on the same held-out rows.")),
+      el("div", { class: "grid2", style: "margin-top:20px" },
+        el("div", { class: "panel" }, el("h3", {}, "Results by group"),
+          table(["Group", "Rows", "Accuracy", "F1", "Recall", "Actual", "Predicted"], groups, [1, 2, 3, 4, 5, 6])),
+        el("div", { class: "panel" }, el("h3", {}, "Calibration"), calibrationChart(m.calibration),
+          el("p", { class: "muted" }, "Probabilities are calibrated, so dots should sit near the dashed line: when the model says 30%, about 30% of those customers churn. Dot size is the number of customers in that bucket."))));
+  } catch (err) { loaded.model = false; $("modelOut").replaceChildren(el("p", { class: "err" }, err.message)); }
+}
+
+async function loadHistory() {
+  try {
+    const { items } = await api("/history?limit=50");
+    if (!items.length) { $("historyOut").replaceChildren(el("div", { class: "empty" }, el("b", {}, "Nothing scored yet"), "Score a customer or a CSV and it shows up here. Each browser sees only its own scores.")); return; }
+    $("historyOut").replaceChildren(
+      el("p", { class: "muted" }, "Your scores from this browser, newest first. Stored in Cosmos DB and deleted after 30 days."),
+      table(["When", "Source", "Details", "Result"], items.map((i) => [
+        new Date(i.ts).toLocaleString(),
+        i.endpoint === "predict" ? "Single" : "CSV",
+        i.features ? `${i.features.Geography}, age ${i.features.Age}, credit ${i.features.CreditScore}` : `${i.n_scored} rows`,
+        i.features ? el("span", { class: "tag " + (i.churn ? "leave" : "stay") }, pct(i.probability)) : `${i.n_churn} flagged`])));
+  } catch (err) { $("historyOut").replaceChildren(el("p", { class: "err" }, err.message)); }
+}
+
+checkHealth();
+const start = location.hash.slice(1);
+if (document.getElementById(start) && start !== "score") show(start);
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+name: deploy
+on:
+  push:
+    branches: [main]
+    paths: [api/**, functions/**, training/**, infra/**, web/**, .github/workflows/deploy.yml]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+env:
+  RESOURCE_GROUP: ${{ vars.RESOURCE_GROUP }}
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      ref: ${{ steps.ref.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: name
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/churn-azure-api" >> "$GITHUB_OUTPUT"
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: api
+          push: true
+          tags: ${{ steps.name.outputs.image }}:${{ github.sha }}
+      - id: ref
+        run: echo "ref=${{ steps.name.outputs.image }}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+
+  infra:
+    needs: image
+    runs-on: ubuntu-latest
+    outputs:
+      function: ${{ steps.out.outputs.function }}
+      api: ${{ steps.out.outputs.api }}
+      swa: ${{ steps.out.outputs.swa }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - run: ./infra/deploy.sh
+        env:
+          CONTAINER_IMAGE: ${{ needs.image.outputs.ref }}
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+      - id: out
+        run: |
+          q() { az deployment group show -g "$RESOURCE_GROUP" -n main --query "properties.outputs.$1.value" -o tsv; }
+          echo "function=$(q functionAppName)" >> "$GITHUB_OUTPUT"
+          echo "api=$(q apiUrl)" >> "$GITHUB_OUTPUT"
+          echo "swa=$(q swaName)" >> "$GITHUB_OUTPUT"
+
+  functions:
+    needs: [image, infra]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp -r training functions/training
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ needs.infra.outputs.function }}
+          package: functions
+          sku: flexconsumption
+          remote-build: true
+      - run: ./infra/deploy.sh
+        env:
+          CONTAINER_IMAGE: ${{ needs.image.outputs.ref }}
+          ALERT_EMAIL: ${{ vars.ALERT_EMAIL }}
+          DEPLOY_EVENT_SUB: "true"
+
+  web:
+    needs: infra
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo 'window.API_URL = "${{ needs.infra.outputs.api }}";' > web/config.js
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - id: token
+        run: |
+          t=$(az staticwebapp secrets list -n "${{ needs.infra.outputs.swa }}" --query properties.apiKey -o tsv)
+          echo "::add-mask::$t"
+          echo "token=$t" >> "$GITHUB_OUTPUT"
+      - uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.token.outputs.token }}
+          action: upload
+          app_location: web
+          skip_app_build: true
+
+  smoke:
+    needs: [infra, web, functions]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Score a known customer
+        run: |
+          api="${{ needs.infra.outputs.api }}"
+          curl -fsS --retry 6 --retry-delay 10 --max-time 90 "$api/ready"
+          body='{"CreditScore":650,"Geography":"France","Gender":"Male","Age":35,"Tenure":5,"Balance":50000,"NumOfProducts":1,"HasCrCard":1,"IsActiveMember":1,"EstimatedSalary":80000}'
+          out=$(curl -fsS --max-time 60 -X POST "$api/predict" -H 'content-type: application/json' -d "$body")
+          echo "$out"
+          echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert 0 <= d["probability"] <= 1 and d["threshold"] > 0'
