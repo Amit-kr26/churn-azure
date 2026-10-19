@@ -1,4 +1,4 @@
-azure-functions==1.23.0
+azure-functions==2.3.0
 azure-identity==1.26.0
 azure-storage-file-datalake==12.26.0
 azure-ai-ml==1.35.2
