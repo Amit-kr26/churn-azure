@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.env
+local.settings.json
+.python_packages/
+functions/training/
+data/raw/*.csv
+!data/raw/.gitkeep
+.azure/

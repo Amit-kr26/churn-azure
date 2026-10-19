@@ -1,0 +1,46 @@
+{
+  "features": [
+    "CreditScore",
+    "Age",
+    "Tenure",
+    "Balance",
+    "NumOfProducts",
+    "HasCrCard",
+    "IsActiveMember",
+    "EstimatedSalary",
+    "Geography",
+    "Gender"
+  ],
+  "categorical": [
+    "Geography",
+    "Gender"
+  ],
+  "numeric": [
+    "CreditScore",
+    "Age",
+    "Tenure",
+    "Balance",
+    "NumOfProducts",
+    "HasCrCard",
+    "IsActiveMember",
+    "EstimatedSalary"
+  ],
+  "target": "Exited",
+  "algorithm": "gradient_boosting",
+  "threshold": 0.29,
+  "reference": {
+    "CreditScore": 652,
+    "Age": 37,
+    "Tenure": 5,
+    "Balance": 96654.72,
+    "NumOfProducts": 1,
+    "HasCrCard": 1,
+    "IsActiveMember": 1,
+    "EstimatedSalary": 100187.43,
+    "Geography": "France",
+    "Gender": "Male"
+  },
+  "model_version": "2026.10.19.1013",
+  "data_source": "real",
+  "n_rows": 10000
+}

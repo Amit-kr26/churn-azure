@@ -1,0 +1,12 @@
+{
+  "model_version": "2026.10.19.1013",
+  "data_source": "real",
+  "n_rows": 10000,
+  "created_utc": "2026-10-19T10:15:04.663906+00:00",
+  "files": {
+    "churn_model.pkl": "sha256:46bb99f400e2f93ee0f9015db69b76838ba3994a8cef4504277268a608260191",
+    "columns.json": "sha256:e1768cc33e438928c041a984e7956d1391a92564b5a75451e6ae64e7a28f5933",
+    "metrics.json": "sha256:b903a9c072a72d472df436f1fbf4dd6b85191c7554f53bb73224f0ef58ca911b",
+    "stats.json": "sha256:b684fac4805ccf85a0070839a796889294a63c525936a71664cccb806145f3e6"
+  }
+}

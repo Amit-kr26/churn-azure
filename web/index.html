@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Score a customer · Churn predictor</title>
+<meta name="description" content="Score bank customers for churn risk, inspect the drivers, and review the model behind the prediction.">
+<meta name="theme-color" content="#e9ede8" id="themeColor">
+<script src="theme.js"></script>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/schibsted-grotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="styles.css">
+<script src="config.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-head">
+      <a class="brand" href="#score" aria-label="Churn predictor, score a customer">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="3" y="12" width="5" height="16" rx="1.5" fill="currentColor"></rect>
+          <rect x="11" y="6" width="5" height="22" rx="1.5" fill="currentColor"></rect>
+          <rect x="19" y="10" width="5" height="18" rx="1.5" fill="currentColor"></rect>
+          <rect x="27" y="4" width="5" height="5" rx="1.5" fill="var(--accent)"></rect>
+        </svg>
+        <span class="brand-text">
+          <strong>Churn predictor</strong>
+          <span>Retention risk</span>
+        </span>
+      </a>
+    </div>
+
+    <nav class="rail-nav" aria-label="Views">
+      <a class="nav-item" href="#score" data-view="score" aria-current="page">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="8" r="3.5"></circle><path d="M4 20a7 7 0 0 1 14 0"></path><path d="m17.5 4 1.4 1.4L21.5 3"></path>
+        </svg>
+        <span class="nav-full">Score a customer</span><span class="nav-short">Score</span>
+      </a>
+      <a class="nav-item" href="#batch" data-view="batch">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 5h16M4 12h16M4 19h9"></path><path d="M18 16v5m-2.5-2.5h5"></path>
+        </svg>
+        <span class="nav-full">Score a CSV</span><span class="nav-short">Batch</span>
+      </a>
+      <a class="nav-item" href="#data" data-view="data">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 20V10m5 10V4m5 16v-7m5 7V7"></path>
+        </svg>
+        <span class="nav-full">Training data</span><span class="nav-short">Data</span>
+      </a>
+      <a class="nav-item" href="#model" data-view="model">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7h16M4 17h16"></path><circle cx="9" cy="7" r="2"></circle><circle cx="15" cy="17" r="2"></circle>
+        </svg>
+        <span class="nav-full">Model</span><span class="nav-short">Model</span>
+      </a>
+      <a class="nav-item" href="#history" data-view="history">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path>
+        </svg>
+        <span class="nav-full">Recent scores</span><span class="nav-short">History</span>
+      </a>
+    </nav>
+
+    <div class="rail-foot">
+      <div class="status" id="apiStatus" data-state="checking" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="statusText">Connecting to API</span>
+      </div>
+      <button class="text-button" id="retryStatus" type="button" hidden>Retry connection</button>
+      <div class="model-line">Model <span id="modelVersion">—</span></div>
+      <div class="theme-switch">
+        <span class="theme-label" id="themeLabel">Theme</span>
+        <div class="segmented segmented-small" role="group" aria-labelledby="themeLabel">
+          <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+          <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="workspace">
+    <main class="sheet" id="main" tabindex="-1">
+      <div class="sheet-inner">
+
+        <section class="view" id="view-score" data-view-panel="score" aria-labelledby="score-title">
+          <header class="page-head">
+            <div class="page-head-copy">
+              <h1 id="score-title">Score a customer</h1>
+              <p>Estimate the chance this customer leaves, and see which details moved the result.</p>
+            </div>
+          </header>
+
+          <div class="score-grid">
+            <section class="panel form-panel" aria-labelledby="profile-title">
+              <div class="panel-head">
+                <div>
+                  <h2 id="profile-title">Customer profile</h2>
+                  <p>Ten fields from the bank's customer record.</p>
+                </div>
+                <div class="preset-group" aria-label="Sample profiles">
+                  <button class="preset-button" type="button" data-preset="steady">Steady sample</button>
+                  <button class="preset-button" type="button" data-preset="risk">At-risk sample</button>
+                </div>
+              </div>
+
+              <form id="scoreForm">
+                <fieldset class="form-section">
+                  <legend>Customer record</legend>
+                  <div class="field-grid">
+                    <label class="field">
+                      <span class="field-label">Credit score <span class="field-note">300–900</span></span>
+                      <input name="CreditScore" type="number" min="300" max="900" step="1" value="650" required>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Age <span class="field-note">18–100</span></span>
+                      <input name="Age" type="number" min="18" max="100" step="1" value="42" required>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Country</span>
+                      <select name="Geography">
+                        <option>France</option><option>Germany</option><option>Spain</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Gender</span>
+                      <select name="Gender">
+                        <option>Female</option><option>Male</option>
+                      </select>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="form-section">
+                  <legend>Relationship and balance</legend>
+                  <div class="field-grid">
+                    <label class="field">
+                      <span class="field-label">Years as customer <span class="field-note">0–10</span></span>
+                      <input name="Tenure" type="number" min="0" max="10" step="1" value="3" required>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Products held <span class="field-note">1–4</span></span>
+                      <select name="NumOfProducts">
+                        <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Balance</span>
+                      <input name="Balance" type="number" min="0" step="0.01" value="76000" required>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Estimated salary</span>
+                      <input name="EstimatedSalary" type="number" min="0" step="0.01" value="100000" required>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Has credit card</span>
+                      <select name="HasCrCard">
+                        <option value="1">Yes</option><option value="0">No</option>
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="field-label">Active member</span>
+                      <select name="IsActiveMember">
+                        <option value="1">Yes</option><option value="0">No</option>
+                      </select>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <div class="form-actions">
+                  <button class="button primary" type="submit" id="scoreBtn">Score customer</button>
+                  <button class="button quiet" type="button" id="resetForm">Reset</button>
+                  <span class="form-hint" id="formHint">The model flags churn at its current cut-off.</span>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel result-panel" id="result" aria-live="polite" aria-busy="false">
+              <h2 class="sr-only">Score result</h2>
+              <div class="empty-state">
+                <h2>No score yet</h2>
+                <p>Fill in the profile and press Score customer. You’ll get a probability, the model’s flag line, and the fields that moved it.</p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-batch" data-view-panel="batch" aria-labelledby="batch-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <h1 id="batch-title">Score a CSV</h1>
+              <p>Score up to 500 customers at once and rank them by churn risk.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button secondary" id="tpl" type="button">Download template</button>
+            </div>
+          </header>
+
+          <section class="panel upload-panel" aria-labelledby="upload-title">
+            <h2 class="sr-only" id="upload-title">Upload a CSV</h2>
+            <button class="dropzone" id="dropzone" type="button">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 16V4m-4 4 4-4 4 4"></path><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"></path>
+              </svg>
+              <span class="dropzone-title">Drop a CSV here, or choose a file</span>
+              <span class="dropzone-meta">Up to 500 rows and 1 MB · 10 required columns</span>
+            </button>
+            <input class="sr-only" id="file" type="file" accept=".csv,text/csv" aria-label="CSV file">
+            <div class="file-row" id="fileRow" hidden>
+              <span class="file-mark" aria-hidden="true">CSV</span>
+              <div class="file-copy">
+                <strong id="fileName"></strong>
+                <span id="fileMeta"></span>
+              </div>
+              <div class="file-actions">
+                <button class="text-button" id="changeFile" type="button">Choose a different CSV</button>
+                <button class="text-button" id="clearFile" type="button">Remove</button>
+              </div>
+            </div>
+            <div class="upload-actions">
+              <button class="button primary" id="batchBtn" type="button" disabled>Score file</button>
+              <span class="form-hint" id="batchHint" role="status" aria-live="polite">Choose a CSV to score.</span>
+            </div>
+            <details class="columns-help">
+              <summary>Required columns</summary>
+              <p>The file needs the same ten fields the single-customer form uses. <code>CustomerId</code> and <code>Exited</code> are optional for scoring.</p>
+              <code>CreditScore, Geography, Gender, Age, Tenure, Balance, NumOfProducts, HasCrCard, IsActiveMember, EstimatedSalary</code>
+            </details>
+          </section>
+
+          <div id="batchOut" aria-live="polite"></div>
+        </section>
+
+        <section class="view" id="view-data" data-view-panel="data" aria-labelledby="data-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <h1 id="data-title">Training data</h1>
+              <p>See where churn concentrates in the data the model learned from.</p>
+            </div>
+          </header>
+          <div id="dataOut">
+            <div class="loading-state" aria-label="Loading training data">
+              <div class="skeleton skeleton-strip"></div>
+              <div class="skeleton-grid">
+                <div class="skeleton skeleton-panel"></div>
+                <div class="skeleton skeleton-panel"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-model" data-view-panel="model" aria-labelledby="model-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <h1 id="model-title">Model</h1>
+              <p>How the current model performs, and where it is less reliable.</p>
+            </div>
+          </header>
+          <div id="modelOut">
+            <div class="loading-state" aria-label="Loading model metrics">
+              <div class="skeleton skeleton-strip"></div>
+              <div class="skeleton-grid">
+                <div class="skeleton skeleton-panel"></div>
+                <div class="skeleton skeleton-panel"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-history" data-view-panel="history" aria-labelledby="history-title" hidden>
+          <header class="page-head">
+            <div class="page-head-copy">
+              <h1 id="history-title">Recent scores</h1>
+              <p>Your scores from this browser, newest first. Stored for 30 days.</p>
+            </div>
+            <div class="page-actions">
+              <button class="button secondary" id="refreshHistory" type="button">Refresh</button>
+            </div>
+          </header>
+          <div id="historyOut">
+            <div class="loading-state" aria-label="Loading recent scores">
+              <div class="skeleton skeleton-panel skeleton-tall"></div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="page-foot">
+          <span>Bank churn dataset</span>
+          <span>Scores are model estimates, not credit decisions.</span>
+        </footer>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>
