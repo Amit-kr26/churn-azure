@@ -23,7 +23,7 @@ jobs:
     outputs:
       ref: ${{ steps.ref.outputs.ref }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -48,7 +48,7 @@ jobs:
       api: ${{ steps.out.outputs.api }}
       swa: ${{ steps.out.outputs.swa }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -69,7 +69,7 @@ jobs:
     needs: [image, infra]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: cp -r training functions/training
       - uses: azure/login@v2
         with:
@@ -92,7 +92,7 @@ jobs:
     needs: infra
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: echo 'window.API_URL = "${{ needs.infra.outputs.api }}";' > web/config.js
       - uses: azure/login@v2
         with:
