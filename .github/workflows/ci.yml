@@ -1,0 +1,34 @@
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r api/requirements-dev.txt -r training/requirements.txt ruff
+      - run: ruff check .
+      - run: pytest api/tests functions/tests training/tests -q
+      - run: az bicep build --file infra/bicep/main.bicep --stdout > /dev/null
+        env:
+          CONTAINER_IMAGE: ci
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infra
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

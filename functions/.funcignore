@@ -1,0 +1,7 @@
+.git*
+.vscode
+__*
+venv
+local.settings.json
+tests
+.python_packages
