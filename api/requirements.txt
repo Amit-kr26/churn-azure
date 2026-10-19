@@ -3,7 +3,7 @@ uvicorn==0.30.6
 scikit-learn==1.8.0
 pandas==3.0.2
 joblib==1.5.3
-pydantic==2.13.5
+pydantic==2.14.1
 PyJWT==2.15.1
 cryptography==50.0.2
 azure-storage-blob==12.31.0
